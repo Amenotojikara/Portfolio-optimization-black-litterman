@@ -24,3 +24,4 @@ Thumbs.db
 # Secrets / local config
 .env
 *.key
+anaconda_projects/
