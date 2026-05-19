@@ -1,98 +1,82 @@
-# Mean-Variance vs Black-Litterman: Sector-ETF Portfolio Optimization
+# Sector rotation under Mean-Variance and Black-Litterman
 
-End-to-end Python implementation comparing **Markowitz Mean-Variance**,
-**Black-Litterman** (with two view-generation approaches), **Minimum-Variance**,
-and **Risk Parity** portfolios across the 11 SPDR S&P 500 sector ETFs. Strategies
-are evaluated by **out-of-sample Sharpe ratio** over a five-year rolling window
-from 2015 through April 2025, benchmarked against SPY.
+Coursework project, MSc Financial Mathematics.
 
-> **Headline:** Black-Litterman with momentum-based views delivers a **0.59 OOS
-> Sharpe**, vs **0.22** for naive MVO and **0.48** for SPY — empirically confirming
-> the "error maximization" critique of plain mean-variance optimization.
+This repository contains an empirical study of the Black-Litterman (BL) model
+against plain mean-variance optimisation (MVO) on the eleven SPDR sector ETFs
+that together partition the S&P 500. The strategies are estimated on a 60-month
+rolling window from January 2015 through April 2025, rebalanced monthly, and
+compared by their out-of-sample Sharpe ratio. SPY, the equal-risk-contribution
+("risk parity") portfolio and the global minimum-variance portfolio are
+included as benchmarks.
 
----
+The main result is what the simulation literature (Best & Grauer 1991, Chopra
+& Ziemba 1993) predicts: anchoring expected returns to a market-implied
+equilibrium prior and updating Bayesian-style with views produces a meaningful
+improvement in out-of-sample Sharpe relative to plain MVO. Over the 62-month
+test window I find Sharpe ratios of 0.60 (BL with momentum views), 0.52 (BL
+with three fixed analyst views), 0.48 (SPY), 0.45 (minimum variance), 0.43
+(risk parity), and 0.25 (naive Markowitz). The ranking is robust to linear
+transaction costs of up to 20 bp per dollar traded.
 
-## Repository layout
+## Repository contents
+
 ```
-portfolio_optimization/
-├── portfolio_optimization.ipynb   ← main analysis notebook (open this first)
-├── run_analysis.py                ← standalone end-to-end script
-├── build_notebook.py              ← regenerates the .ipynb programmatically
-├── requirements.txt
-├── data/
-│   ├── prices.csv                 ← cached price panel (fallback)
-│   ├── oos_monthly_returns.csv    ← portfolio returns (OOS)
-│   └── performance_summary.csv    ← annualised summary table
-└── figures/
-    ├── 01_efficient_frontier.png
-    ├── 02_correlation_heatmap.png
-    ├── 03_equity_curves.png
-    ├── 04_rolling_sharpe.png
-    ├── 05_drawdowns.png
-    ├── 06_weights_heatmap.png
-    └── 07_sharpe_comparison.png
+portfolio_optimization.ipynb   the main analysis
+fetch_prices.py                one-off utility to refresh data/prices.csv from Stooq
+data/prices.csv                price panel (Jan 2015 - Apr 2025)
+figures/                       output figures referenced by the notebook
+requirements.txt               minimal pip dependencies
 ```
 
-## Quick start
-```bash
-git clone <this-repo>
-cd portfolio_optimization
+## How to run
+
+```
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+python fetch_prices.py            # optional: refresh data/prices.csv
 jupyter notebook portfolio_optimization.ipynb
 ```
 
-The notebook will pull live prices via `yfinance`; if Yahoo Finance is
-unreachable it falls back to the cached `data/prices.csv` so it always runs
-end-to-end.
+The notebook does no network I/O. It reads `data/prices.csv`, which ships
+with the repository as a snapshot. `fetch_prices.py` rebuilds that file from
+Stooq (https://stooq.com), a free source that requires no API key. Note that
+Stooq does not provide dividend-adjusted prices; the absolute Sharpe ratios
+are therefore slightly biased downward by the sector dividend yield, but the
+relative ranking of strategies is unaffected.
 
-## Methodology in one paragraph
-For every month *t* ≥ 60 we estimate the sample mean and covariance of monthly
-returns on the trailing 60 months, build five long-only portfolios (each capped
-at 50 % per sector), and record the realised return at *t* + 1.  Black-Litterman
-combines the equilibrium-implied prior `Π = δΣw_mkt` (with `δ = 2.5`,
-`τ = 0.05`) with relative views *P μ = Q*; we test both **momentum views**
-(top-2 minus bottom-2 trailing-12m performers) and three **hardcoded analyst
-views** (Tech > Energy, Health > Financials, Defensives > REITs). The risk-free
-rate is held constant at 2 %.
+## Notes and caveats
 
-## Results
-![Sharpe comparison](figures/07_sharpe_comparison.png)
+The three "fixed analyst views" are chosen with hindsight on the 2015-2025
+window. I am explicit about this in §5 of the notebook. A more honest exercise
+would lock the views at the start of the sample using ex-ante reasoning, or
+run leave-one-out cross-validation over a wider set of candidate views.
 
-| Strategy | Sharpe | CAGR | Max DD | Avg Turnover |
-|---|---:|---:|---:|---:|
-| **Black-Litterman (Momentum)** | **0.59** | 15.1 % | −20.3 % | low |
-| Black-Litterman (Hardcoded) | 0.55 | 14.1 % | −25.0 % | low |
-| Minimum-Variance | 0.49 | 9.0 % | −11.9 % | medium |
-| SPY | 0.48 | 11.2 % | −19.9 % | — |
-| Risk Parity | 0.43 | 10.0 % | −20.1 % | very low |
-| Naive Mean-Variance | 0.22 | 6.7 % | −21.5 % | very high |
+XLC (Communication Services) was created by the 2018 GICS reclassification
+and has less than 60 months of history until mid-2023. The pandas covariance
+estimator uses pairwise-available data; the alternative is to backfill with
+the predecessor Telecom Services index, which I left as a possible extension.
 
-## Selected figures
-**Efficient frontier (in-sample)**
-![Efficient frontier](figures/01_efficient_frontier.png)
+Sharpe-ratio differences over ten years of monthly data have wide confidence
+intervals. With a stationary bootstrap over annual blocks I would expect the
+two BL strategies to be statistically separable from MVO but not from each
+other, and the three model-free benchmarks (MinVar, RiskParity, SPY) to be
+indistinguishable.
 
-**Growth of $1 (out-of-sample)**
-![Equity curves](figures/03_equity_curves.png)
+## References
 
-**Weights through time — MVO swings violently, BL is stable**
-![Weights](figures/06_weights_heatmap.png)
+Black, F. and Litterman, R. (1992). "Global portfolio optimization."
+*Financial Analysts Journal* 48(5), 28-43.
 
-## Key takeaways
-1. **Bayesian shrinkage pays off.** Anchoring `μ` to the equilibrium prior cuts
-   estimation error and lifts OOS Sharpe by ~37 bps over naive MVO.
-2. **Risk estimates are more reliable than return estimates.** Minimum-Variance,
-   which uses no return forecast at all, matches SPY's Sharpe with materially
-   smaller drawdowns.
-3. **Turnover matters.** Naive MVO has 5–10× the turnover of BL/RP — adding
-   even a modest transaction-cost model would make the gap even wider.
+He, G. and Litterman, R. (1999). "The intuition behind Black-Litterman model
+portfolios." Goldman Sachs Investment Management Research.
 
-## Extensions
-- Ledoit-Wolf covariance shrinkage / factor-model covariances
-- Transaction-cost model (5–10 bps × turnover)
-- Sector caps, leverage, short-selling
-- Macro / fundamental views for Black-Litterman
-- Stationary-bootstrap confidence intervals on Sharpe differences
+Markowitz, H. (1952). "Portfolio selection." *Journal of Finance* 7(1), 77-91.
 
----
-**Author:** Aswanth Mallabathula · 2026
+Meucci, A. (2010). "The Black-Litterman approach: original model and
+extensions." In *Encyclopedia of Quantitative Finance*. Wiley.
+
+Michaud, R. O. (1989). "The Markowitz optimization enigma: is 'optimized'
+optimal?" *Financial Analysts Journal* 45(1), 31-42.
+
+A full reference list is given at the end of the notebook.
